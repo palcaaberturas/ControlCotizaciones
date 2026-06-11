@@ -1,0 +1,10 @@
+# Ignorar carpetas temporales de OneDrive
+.tmp.driveupload/
+
+# Ignorar archivos Excel e Informes PDF
+*.xlsx
+*.pdf
+
+# Ignorar entornos virtuales (por si creás uno más adelante)
+venv/
+__pycache__/
