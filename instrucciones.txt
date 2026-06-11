@@ -1,0 +1,90 @@
+CONTROL DE COTIZACIONES - INSTRUCCIONES
+=======================================
+
+1) QUE NECESITA LA OTRA PC
+--------------------------
+- Windows 10 u 11.
+- Python 3.10 o superior (recomendado 3.11).
+- Conexion a internet solo para instalar dependencias la primera vez.
+- Microsoft Excel o Google Sheets (opcional, para abrir/pegar resultados).
+
+Importante al instalar Python:
+- Activar la opcion "Add Python to PATH".
+
+
+2) ARCHIVOS QUE TENES QUE COPIAR
+--------------------------------
+Copiar esta carpeta completa en la otra PC:
+- control_cotizaciones.py
+- control_cotizaciones.bat
+- requirement.txt
+- instrucciones.txt
+
+Y para cada uso, en esa misma carpeta deben estar:
+- PP.pdf
+- PV.pdf
+- INFORME.pdf
+
+
+3) INSTALACION (UNA SOLA VEZ)
+-----------------------------
+Abrir una terminal en la carpeta (Shift + click derecho -> "Abrir PowerShell aqui") y ejecutar:
+
+python -m pip install --upgrade pip
+python -m pip install -r requirement.txt
+
+Si "python" no funciona, probar:
+py -m pip install --upgrade pip
+py -m pip install -r requirement.txt
+
+
+4) COMO EJECUTAR
+----------------
+Opcion facil:
+- Doble click en: control_cotizaciones.bat
+
+Opcion por terminal:
+- python control_cotizaciones.py
+
+El script pregunta el color de la obra:
+- N = Negro
+- B = Blanco
+- A = Anodizado
+
+
+5) SALIDA
+---------
+Se genera:
+- Control_Cotizacion.xlsx
+
+Contenido:
+- Hoja "Control" con:
+  - Tabla de perfiles (codigo, color, cantidad).
+  - Resumen de vidrios por categoria.
+  - Resumen de informe y chequeo de total vidrios.
+- Hoja "Checklist" con columna "Chequeado" seleccionable:
+  - ☐ / ☑ / ☒
+
+Nota:
+- Los importes y valores resumen salen redondeados a enteros.
+- Sin simbolo $.
+- Sin separador de miles.
+
+
+6) OPCIONES AVANZADAS (OPCIONAL)
+--------------------------------
+Ejecutar con rutas personalizadas:
+
+python control_cotizaciones.py --pp "C:\ruta\PP.pdf" --pv "C:\ruta\PV.pdf" --informe "C:\ruta\INFORME.pdf" --out "C:\ruta\Salida.xlsx" --color N
+
+
+7) ERRORES COMUNES
+------------------
+Error: "No existe el archivo ..."
+- Falta PP.pdf, PV.pdf o INFORME.pdf en la ruta esperada.
+
+Error: "Permission denied: Control_Cotizacion.xlsx"
+- El Excel esta abierto. Cerrarlo y ejecutar de nuevo.
+
+Error: "python no se reconoce ..."
+- Python no esta en PATH. Reinstalar Python activando "Add Python to PATH", o usar "py".
