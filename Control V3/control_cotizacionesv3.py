@@ -1213,6 +1213,59 @@ def _prompt_variant_name() -> str:
         print("El nombre no puede estar vacío.")
 
 
+def _find_latest_base(bases_dir: Path):
+    """Devuelve el Base_*.xlsx más reciente en la carpeta, o None si no hay."""
+    candidates = sorted(bases_dir.glob("Base_*.xlsx"), reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _prompt_select_base(bases_dir: Path) -> Path:
+    """Lista las bases disponibles y deja elegir. Si hay una sola, la usa directamente."""
+    bases = sorted(bases_dir.glob("Base_*.xlsx"), reverse=True)
+    if not bases:
+        raise SystemExit(f"No hay archivos Base_*.xlsx en {bases_dir}")
+    if len(bases) == 1:
+        print(f"Base de precios: {bases[0].name}")
+        return bases[0]
+    print("\nBases de precios disponibles:")
+    for i, b in enumerate(bases, 1):
+        marker = " <- más reciente" if i == 1 else ""
+        print(f"  {i}. {b.name}{marker}")
+    while True:
+        resp = input(f"Elegir base [1-{len(bases)}, Enter = más reciente]: ").strip()
+        if resp == "":
+            return bases[0]
+        if resp.isdigit() and 1 <= int(resp) <= len(bases):
+            return bases[int(resp) - 1]
+        print(f"Ingresar un número entre 1 y {len(bases)}, o Enter.")
+
+
+def _read_prices_from_base(base_path: Path) -> dict:
+    """Lee precios c/IVA de Base_*.xlsx. Devuelve {codigo: {'A': float, 'B': float, 'N': float}}."""
+    wb_base = load_workbook(base_path, data_only=True)
+    ws = wb_base["Precios"]
+    prices = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        row_padded = tuple(row) + (None,) * 5
+        codigo, _desc, a_iva, b_iva, n_iva = row_padded[:5]
+        if codigo is not None:
+            prices[str(codigo).strip()] = {"A": a_iva, "B": b_iva, "N": n_iva}
+    return prices
+
+
+def _write_prices_to_perfiles(ws_bp, prices: dict) -> None:
+    """Escribe precios c/IVA en Base perfiles (cols 12=A, 13=B, 14=N) buscando por código (col A)."""
+    for row in ws_bp.iter_rows(min_row=4, max_col=14):
+        codigo = row[0].value
+        if not codigo:
+            continue
+        p = prices.get(str(codigo).strip())
+        if p:
+            ws_bp.cell(row=row[0].row, column=12).value = p["A"]
+            ws_bp.cell(row=row[0].row, column=13).value = p["B"]
+            ws_bp.cell(row=row[0].row, column=14).value = p["N"]
+
+
 def _fill_cotizador_variant(
     wb: "Workbook",
     variant: str,
@@ -1226,6 +1279,7 @@ def _fill_cotizador_variant(
     color: str,
     pa_totals: Dict[str, float] | None = None,
     informe_summary: Dict[str, float | None] | None = None,
+    base_name: str | None = None,
 ) -> None:
     """Agrega hojas de una variante al workbook copiando las plantillas del V7."""
     pedido_name = f"Pedido {variant}"[:31]
@@ -1334,6 +1388,8 @@ def _fill_cotizador_variant(
     ws_principal["B6"] = _round_to_int(float(pv_totals.get(GLASS_LAMIN, 0.0)))
     ws_principal["B7"] = _round_to_int(float(pv_totals.get(GLASS_CRUDOS, 0.0)))
     ws_principal["B8"] = _round_to_int(float(pv_totals.get(GLASS_VIDRIAL, 0.0)))
+    if base_name:
+        ws_principal["F1"] = f"Base precios: {base_name}"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -1461,6 +1517,18 @@ def main() -> int:
                             dst.cell(row=cell.row, column=cell.column).value = cell.value
             print("  Hojas plantilla importadas correctamente.")
 
+        # Cargar precios desde base central si existe
+        bases_dir = Path(__file__).parent / "Bases de Precios"
+        base_name = None
+        if bases_dir.exists():
+            base_path = _prompt_select_base(bases_dir)
+            prices = _read_prices_from_base(base_path)
+            _write_prices_to_perfiles(wb["Base perfiles"], prices)
+            base_name = base_path.stem
+            print(f"Precios actualizados desde: {base_path.name}")
+        else:
+            print("Aviso: carpeta 'Bases de Precios/' no encontrada, usando precios del V7.")
+
         _fill_cotizador_variant(
             wb,
             variant,
@@ -1474,6 +1542,7 @@ def main() -> int:
             color,
             pa_totals=pa_totals,
             informe_summary=informe_summary,
+            base_name=base_name,
         )
         wb.save(output_path)
         print(f"Cotizador guardado: {output_path.resolve()}")

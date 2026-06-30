@@ -5,6 +5,10 @@
 *.xlsx
 *.pdf
 
+# Trackear la carpeta de bases de precios versionadas
+!Control V3/Bases de Precios/
+!Control V3/Bases de Precios/*.xlsx
+
 # Ignorar entornos virtuales (por si creás uno más adelante)
 venv/
 __pycache__/
