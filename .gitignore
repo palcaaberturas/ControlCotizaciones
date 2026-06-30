@@ -9,6 +9,9 @@
 !Control V3/Bases de Precios/
 !Control V3/Bases de Precios/*.xlsx
 
+# Trackear el template del cotizador
+!Control V3/Cotizador V7.xlsx
+
 # Ignorar entornos virtuales (por si creás uno más adelante)
 venv/
 __pycache__/

@@ -43,8 +43,9 @@ CHECK_NO = "\u2612"
 
 GLASS_LAMIN = "Vidrios LAMIN"
 GLASS_CRUDOS = "Vidrios Crudos"
-GLASS_VIDRIAL = "Vidrios Vidrial"
-GLASS_ORDER = [GLASS_LAMIN, GLASS_CRUDOS, GLASS_VIDRIAL]
+GLASS_DVH = "Vidrios Vidrial DVH"
+GLASS_TEMPLADOS = "Vidrios Vidrial Templados"
+GLASS_ORDER = [GLASS_LAMIN, GLASS_CRUDOS, GLASS_DVH, GLASS_TEMPLADOS]
 PV_DETAIL_HEADERS = ["TIP.", "LADO1 VIDRIO", "LADO2 VIDRIO", "CANT.", "VIDRIO1", "VIDRIO2", "CAMARA"]
 BIPUNTO_UNITARIO = 25000
 RETAZO_USEFUL_MIN_DEFAULT = 1000
@@ -510,13 +511,13 @@ def _extract_opti_profiles(opti_path: Path, color: str) -> List[Dict[str, object
 
 def _classify_glass(glass_name: str) -> str:
     n = _normalize(glass_name)
-    if any(token in n for token in ("templado", "camara", "cortado", "vidrial")):
-        return GLASS_VIDRIAL
     if "laminado" in n:
         return GLASS_LAMIN
     if "float" in n or "pacifico" in n:
         return GLASS_CRUDOS
-    return GLASS_VIDRIAL
+    if "camara" in n:
+        return GLASS_DVH
+    return GLASS_TEMPLADOS
 
 
 def _extract_pv_summary(pv_pdf: Path) -> Dict[str, float]:
@@ -1272,7 +1273,7 @@ def _fill_cotizador_variant(
     perfiles: List[Dict[str, object]],
     retazos_resto: List[Dict[str, object]],
     retazos_alta_prestacion: List[Dict[str, object]],
-    pv_detail_rows: List[Dict[str, object]],
+    dvh_rows: List[Dict[str, object]],
     incluir_retazos: bool,
     bipuntos_cantidad: int,
     pv_totals: Dict[str, float],
@@ -1280,6 +1281,7 @@ def _fill_cotizador_variant(
     pa_totals: Dict[str, float] | None = None,
     informe_summary: Dict[str, float | None] | None = None,
     base_name: str | None = None,
+    templado_rows: List[Dict[str, object]] | None = None,
 ) -> None:
     """Agrega hojas de una variante al workbook copiando las plantillas del V7."""
     pedido_name = f"Pedido {variant}"[:31]
@@ -1292,7 +1294,7 @@ def _fill_cotizador_variant(
             raise SystemExit(f"Ya existe una hoja '{name}'. Elegir un nombre diferente para la variante.")
     if incluir_retazos and retazo_name in wb.sheetnames:
         raise SystemExit(f"Ya existe una hoja '{retazo_name}'.")
-    if pv_detail_rows and dvh_name in wb.sheetnames:
+    if dvh_rows and dvh_name in wb.sheetnames:
         raise SystemExit(f"Ya existe una hoja '{dvh_name}'.")
 
     # --- Pedido ---
@@ -1343,7 +1345,7 @@ def _fill_cotizador_variant(
 
     # --- DVH (solo si hay vidrios DVH en la obra) ---
     dvh_created = False
-    if pv_detail_rows:
+    if dvh_rows:
         ws_dvh = wb.copy_worksheet(wb["Plantilla DVH"])
         ws_dvh.title = dvh_name
         ws_dvh["W2"] = "=SUM(P3:P30)"
@@ -1354,7 +1356,7 @@ def _fill_cotizador_variant(
             for c in range(1, 8):
                 ws_dvh.cell(row=r, column=c).value = None
         dvh_cols = ["TIP.", "LADO1 VIDRIO", "LADO2 VIDRIO", "CANT.", "VIDRIO1", "VIDRIO2", "CAMARA"]
-        for i, item in enumerate(pv_detail_rows):
+        for i, item in enumerate(dvh_rows):
             r = DVH_DATA_START + i
             if r > DVH_MAX:
                 print(
@@ -1366,12 +1368,39 @@ def _fill_cotizador_variant(
                 ws_dvh.cell(row=r, column=col_idx).value = item.get(header)
         dvh_created = True
 
+    # --- Templados (solo si hay vidrios simples/cortados en la obra) ---
+    templados_name = f"Templados {variant}"[:31]
+    templados_created = False
+    if templado_rows:
+        ws_tpl_glass = wb.copy_worksheet(wb["Plantilla Templados"])
+        ws_tpl_glass.title = templados_name
+        ws_tpl_glass["W2"] = "=SUM(I3:I30)"
+        TPLG_DATA_START = 3
+        TPLG_MAX = ws_tpl_glass.max_row
+        for r in range(TPLG_DATA_START, TPLG_MAX + 1):
+            for c in range(1, 6):
+                ws_tpl_glass.cell(row=r, column=c).value = None
+        tplg_cols = ["TIP.", "LADO1 VIDRIO", "LADO2 VIDRIO", "CANT.", "VIDRIO1"]
+        for i, item in enumerate(templado_rows):
+            r = TPLG_DATA_START + i
+            if r > TPLG_MAX:
+                print(
+                    f"Advertencia: plantilla Templados soporta {TPLG_MAX - TPLG_DATA_START + 1} filas max.",
+                    file=sys.stderr,
+                )
+                break
+            for col_idx, header in enumerate(tplg_cols, start=1):
+                ws_tpl_glass.cell(row=r, column=col_idx).value = item.get(header)
+        templados_created = True
+
     # --- Principal: copia y actualiza referencias de hoja ---
     ws_principal = wb.copy_worksheet(wb["Plantilla Principal"])
     ws_principal.title = principal_name
     sheet_map = {"Plantilla Pedido": pedido_name}
     if retazo_created:
         sheet_map["Plantilla Retazo"] = retazo_name
+    if templados_created:
+        sheet_map["Plantilla Templados"] = templados_name
     for row in ws_principal.iter_rows():
         for cell in row:
             if cell.value and isinstance(cell.value, str) and cell.value.startswith("="):
@@ -1387,7 +1416,14 @@ def _fill_cotizador_variant(
     ws_principal["B4"] = bipuntos_cantidad * BIPUNTO_UNITARIO
     ws_principal["B6"] = _round_to_int(float(pv_totals.get(GLASS_LAMIN, 0.0)))
     ws_principal["B7"] = _round_to_int(float(pv_totals.get(GLASS_CRUDOS, 0.0)))
-    ws_principal["B8"] = _round_to_int(float(pv_totals.get(GLASS_VIDRIAL, 0.0)))
+    if dvh_created:
+        ws_principal["B8"] = f"='{dvh_name}'!W2"
+    else:
+        ws_principal["B8"] = 0
+    if templados_created:
+        ws_principal["B9"] = f"='{templados_name}'!W2"
+    else:
+        ws_principal["B9"] = 0
     if base_name:
         ws_principal["F1"] = f"Base precios: {base_name}"
 
@@ -1458,6 +1494,8 @@ def main() -> int:
         print("Aviso: no se encontraron perfiles en Opti.htm", file=sys.stderr)
 
     pv_detail_rows = _extract_pv_detailed_rows(args.pv)
+    dvh_rows = [r for r in pv_detail_rows if r.get("CAMARA") not in (None, "")]
+    templado_rows = [r for r in pv_detail_rows if r.get("CAMARA") in (None, "")]
     pv_totals = _extract_pv_summary(args.pv)
 
     informe_summary = None
@@ -1507,7 +1545,7 @@ def main() -> int:
             wb_tpl = load_workbook(cotizador_template)
             for tpl_name in [
                 "Plantilla Principal", "Base perfiles", "Base vidrios",
-                "Plantilla Retazo", "Plantilla Pedido", "Plantilla DVH",
+                "Plantilla Retazo", "Plantilla Pedido", "Plantilla DVH", "Plantilla Templados",
             ]:
                 if tpl_name not in wb.sheetnames and tpl_name in wb_tpl.sheetnames:
                     src = wb_tpl[tpl_name]
@@ -1535,7 +1573,7 @@ def main() -> int:
             perfiles,
             retazos_resto,
             retazos_alta_prestacion,
-            pv_detail_rows,
+            dvh_rows,
             analizar_retazos,
             bipuntos,
             pv_totals,
@@ -1543,6 +1581,7 @@ def main() -> int:
             pa_totals=pa_totals,
             informe_summary=informe_summary,
             base_name=base_name,
+            templado_rows=templado_rows,
         )
         wb.save(output_path)
         print(f"Cotizador guardado: {output_path.resolve()}")
